@@ -1,0 +1,161 @@
+// Viji's Beauty Salon: small, dependency-free scripts.
+const SALON_WHATSAPP = '14082554800';
+const SALON_SMS = '+14082554800';
+
+// Mobile menu
+const menuBtn = document.querySelector('.menu');
+const nav = document.getElementById('nav');
+if (menuBtn && nav) {
+  const setOpen = open => {
+    nav.classList.toggle('is-open', open);
+    menuBtn.setAttribute('aria-expanded', String(open));
+    menuBtn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  };
+  menuBtn.addEventListener('click', () => setOpen(!nav.classList.contains('is-open')));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+  nav.addEventListener('click', e => { if (e.target.closest('a')) setOpen(false); });
+}
+
+document.querySelectorAll('[data-year]').forEach(el => { el.textContent = new Date().getFullYear(); });
+
+// ---- helpers shared by the booking and contact forms
+const digits = v => v.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+const prettyPhone = v => { const d = digits(v); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : v; };
+const flag = (form, name, bad) => {
+  const field = form.querySelector(`[data-err="${name}"]`)?.closest('.field');
+  if (field) field.classList.toggle('invalid', bad);
+  return bad;
+};
+const sendLinks = text => ({
+  wa: `https://wa.me/${SALON_WHATSAPP}?text=${encodeURIComponent(text)}`,
+  // iOS uses "&body=", Android "?body="; "?&body=" works on both.
+  sms: `sms:${SALON_SMS}?&body=${encodeURIComponent(text)}`,
+});
+const todayLA = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date()); // YYYY-MM-DD
+const nowMinutesLA = () => {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
+  return +p.find(x => x.type === 'hour').value * 60 + +p.find(x => x.type === 'minute').value;
+};
+
+// ---- Booking
+const book = document.getElementById('book-form');
+if (book) {
+  const date = document.getElementById('f-date');
+  const time = document.getElementById('f-time');
+  const service = document.getElementById('f-service');
+  const confirm = document.getElementById('confirm');
+  const minDate = todayLA();
+  date.min = minDate;
+  const max = new Date(); max.setDate(max.getDate() + 90);
+  date.max = max.toISOString().slice(0, 10);
+
+  // Preselect a service from ?service=slug (links on the services page and blog)
+  const wanted = new URLSearchParams(location.search).get('service');
+  if (wanted && service.querySelector(`option[value="${CSS.escape(wanted)}"]`)) service.value = wanted;
+
+  // Grey out times that have already passed today
+  const refreshTimes = () => {
+    const isToday = date.value === minDate;
+    const now = nowMinutesLA();
+    [...time.options].forEach(o => {
+      if (!o.value) return;
+      const [h, m] = o.value.split(':').map(Number);
+      o.disabled = isToday && h * 60 + m <= now + 30;
+    });
+    if (time.selectedOptions[0]?.disabled) time.value = '';
+  };
+  date.addEventListener('change', refreshTimes);
+
+  const label = sel => sel.selectedOptions[0]?.textContent.trim() || '';
+  const niceDate = v => new Date(`${v}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  book.addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(book);
+    refreshTimes();
+    const bad = [
+      flag(book, 'service', !f.get('service')),
+      flag(book, 'date', !f.get('date') || f.get('date') < minDate),
+      flag(book, 'time', !f.get('time') || time.selectedOptions[0]?.disabled),
+      flag(book, 'name', String(f.get('name')).trim().length < 2),
+      flag(book, 'phone', digits(String(f.get('phone'))).length !== 10),
+    ];
+    if (bad.some(Boolean)) {
+      book.querySelector('.invalid input, .invalid select')?.focus();
+      return;
+    }
+    const req = {
+      service: label(service), stylist: f.get('stylist'), date: niceDate(f.get('date')), time: label(time),
+      name: String(f.get('name')).trim(), phone: prettyPhone(String(f.get('phone'))), notes: String(f.get('notes') || '').trim(),
+    };
+    const text = [
+      'Hi Viji’s Beauty Salon, I’d like to book an appointment:',
+      `• Service: ${req.service}`, `• Stylist: ${req.stylist}`, `• When: ${req.date} at ${req.time}`,
+      `• Name: ${req.name}`, `• Phone: ${req.phone}`, req.notes && `• Notes: ${req.notes}`,
+      'Please confirm. Thank you!',
+    ].filter(Boolean).join('\n');
+    const links = sendLinks(text);
+    document.getElementById('send-wa').href = links.wa;
+    document.getElementById('send-sms').href = links.sms;
+    document.getElementById('summary').innerHTML = '';
+    [['Service', req.service], ['Stylist', req.stylist], ['When', `${req.date}, ${req.time}`], ['Name', req.name], ['Phone', req.phone], ...(req.notes ? [['Notes', req.notes]] : [])]
+      .forEach(([k, v]) => {
+        const row = document.createElement('div');
+        const dt = document.createElement('dt'); dt.textContent = k;
+        const dd = document.createElement('dd'); dd.textContent = v;
+        row.append(dt, dd);
+        document.getElementById('summary').append(row);
+      });
+    // Keep a copy on this device so the customer can find it again.
+    try { localStorage.setItem('vijis-last-request', JSON.stringify({ ...req, savedAt: new Date().toISOString() })); } catch (_) { /* storage may be blocked */ }
+    book.hidden = true;
+    confirm.hidden = false;
+    confirm.focus();
+    confirm.scrollIntoView({ block: 'start' });
+  });
+
+  book.addEventListener('input', e => e.target.closest('.field')?.classList.remove('invalid'));
+  document.getElementById('edit-booking').addEventListener('click', () => {
+    confirm.hidden = true;
+    book.hidden = false;
+    book.querySelector('select, input')?.focus();
+  });
+}
+
+// ---- Contact form (sends through WhatsApp or SMS; no server needed)
+const msg = document.getElementById('msg-form');
+if (msg) {
+  msg.addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(msg);
+    const bad = [
+      flag(msg, 'name', String(f.get('name')).trim().length < 2),
+      flag(msg, 'phone', digits(String(f.get('phone'))).length !== 10),
+      flag(msg, 'message', String(f.get('message')).trim().length < 3),
+    ];
+    if (bad.some(Boolean)) { msg.querySelector('.invalid input, .invalid textarea')?.focus(); return; }
+    const text = `Hi Viji’s Beauty Salon, this is ${String(f.get('name')).trim()} (${prettyPhone(String(f.get('phone')))}).\n\n${String(f.get('message')).trim()}`;
+    const links = sendLinks(text);
+    document.getElementById('msg-wa').href = links.wa;
+    document.getElementById('msg-sms').href = links.sms;
+    document.getElementById('msg-done').hidden = false;
+    document.getElementById('msg-wa').focus();
+  });
+  msg.addEventListener('input', e => e.target.closest('.field')?.classList.remove('invalid'));
+}
+
+// ---- Gallery filters
+const tiles = document.getElementById('tiles');
+if (tiles) {
+  const empty = document.getElementById('empty');
+  document.querySelectorAll('.filter').forEach(btn => btn.addEventListener('click', () => {
+    const key = btn.dataset.filter;
+    document.querySelectorAll('.filter').forEach(b => { const on = b === btn; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); });
+    let shown = 0;
+    tiles.querySelectorAll('.tile').forEach(t => {
+      const show = key === 'all' || t.dataset.tags.split(' ').includes(key);
+      t.hidden = !show; shown += show;
+    });
+    empty.hidden = shown > 0;
+  }));
+}
