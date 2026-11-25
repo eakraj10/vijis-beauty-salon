@@ -1,6 +1,9 @@
 // Viji's Beauty Salon: small, dependency-free scripts.
 const SALON_WHATSAPP = '14082554800';
 const SALON_SMS = '+14082554800';
+// Booking requests go straight to the owner's mobile so she's notified of every new booking (WhatsApp or text).
+const BOOKING_WHATSAPP = '14084443785';
+const BOOKING_SMS = '+14084443785';
 
 // Mobile menu
 const menuBtn = document.querySelector('.menu');
@@ -26,10 +29,10 @@ const flag = (form, name, bad) => {
   if (field) field.classList.toggle('invalid', bad);
   return bad;
 };
-const sendLinks = text => ({
-  wa: `https://wa.me/${SALON_WHATSAPP}?text=${encodeURIComponent(text)}`,
+const sendLinks = (text, wa = SALON_WHATSAPP, sms = SALON_SMS) => ({
+  wa: `https://wa.me/${wa}?text=${encodeURIComponent(text)}`,
   // iOS uses "&body=", Android "?body="; "?&body=" works on both.
-  sms: `sms:${SALON_SMS}?&body=${encodeURIComponent(text)}`,
+  sms: `sms:${sms}?&body=${encodeURIComponent(text)}`,
 });
 const todayLA = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date()); // YYYY-MM-DD
 const nowMinutesLA = () => {
@@ -89,12 +92,12 @@ if (book) {
       name: String(f.get('name')).trim(), phone: prettyPhone(String(f.get('phone'))), notes: String(f.get('notes') || '').trim(),
     };
     const text = [
-      'Hi Viji’s Beauty Salon, I’d like to book an appointment:',
+      'New appointment request for Viji’s Beauty Salon:',
       `• Service: ${req.service}`, `• Stylist: ${req.stylist}`, `• When: ${req.date} at ${req.time}`,
       `• Name: ${req.name}`, `• Phone: ${req.phone}`, req.notes && `• Notes: ${req.notes}`,
       'Please confirm. Thank you!',
     ].filter(Boolean).join('\n');
-    const links = sendLinks(text);
+    const links = sendLinks(text, BOOKING_WHATSAPP, BOOKING_SMS);
     document.getElementById('send-wa').href = links.wa;
     document.getElementById('send-sms').href = links.sms;
     document.getElementById('summary').innerHTML = '';
