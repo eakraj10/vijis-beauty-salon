@@ -87,7 +87,7 @@ if (book) {
       return;
     }
     const req = {
-      service: label(service), stylist: f.get('stylist'), date: niceDate(f.get('date')), time: label(time),
+      service: label(service), date: niceDate(f.get('date')), time: label(time),
       name: String(f.get('name')).trim(), phone: prettyPhone(String(f.get('phone'))), notes: String(f.get('notes') || '').trim(),
     };
     const btn = document.getElementById('book-submit');
@@ -105,7 +105,7 @@ if (book) {
         if (!ok) throw new Error(body.error || 'Something went wrong.');
         const summary = document.getElementById('summary');
         summary.innerHTML = '';
-        [['Service', req.service], ['Stylist', req.stylist], ['When', `${req.date}, ${req.time}`], ['Name', req.name], ['Phone', req.phone], ...(req.notes ? [['Notes', req.notes]] : [])]
+        [['Service', req.service], ['When', `${req.date}, ${req.time}`], ['Name', req.name], ['Phone', req.phone], ...(req.notes ? [['Notes', req.notes]] : [])]
           .forEach(([k, v]) => {
             const row = document.createElement('div');
             const dt = document.createElement('dt'); dt.textContent = k;
