@@ -303,3 +303,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--plum);bo
   .dock .dock-book{background:var(--plum);border-color:var(--plum);color:#fff}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+
+/* Booking form: bot check + error */
+.cf-turnstile{margin:0 0 16px}
+.form-error{margin:14px 0 0;padding:12px 16px;border-radius:10px;background:#fbe9ec;color:#8a1f33;font-size:15px}
+.btn[disabled]{opacity:.7;cursor:wait;transform:none}

@@ -1,9 +1,8 @@
 // Viji's Beauty Salon: small, dependency-free scripts.
 const SALON_WHATSAPP = '14082554800';
 const SALON_SMS = '+14082554800';
-// Booking requests go straight to the owner's mobile so she's notified of every new booking (WhatsApp or text).
-const BOOKING_WHATSAPP = '14084443785';
-const BOOKING_SMS = '+14084443785';
+// Booking requests are sent to the salon's booking API, which texts and emails the owner.
+const BOOKING_API = 'https://api.vijisbeautysalon.com/api/book';
 
 // Mobile menu
 const menuBtn = document.querySelector('.menu');
@@ -91,38 +90,44 @@ if (book) {
       service: label(service), stylist: f.get('stylist'), date: niceDate(f.get('date')), time: label(time),
       name: String(f.get('name')).trim(), phone: prettyPhone(String(f.get('phone'))), notes: String(f.get('notes') || '').trim(),
     };
-    const text = [
-      'New appointment request for Viji’s Beauty Salon:',
-      `• Service: ${req.service}`, `• Stylist: ${req.stylist}`, `• When: ${req.date} at ${req.time}`,
-      `• Name: ${req.name}`, `• Phone: ${req.phone}`, req.notes && `• Notes: ${req.notes}`,
-      'Please confirm. Thank you!',
-    ].filter(Boolean).join('\n');
-    const links = sendLinks(text, BOOKING_WHATSAPP, BOOKING_SMS);
-    document.getElementById('send-wa').href = links.wa;
-    document.getElementById('send-sms').href = links.sms;
-    document.getElementById('summary').innerHTML = '';
-    [['Service', req.service], ['Stylist', req.stylist], ['When', `${req.date}, ${req.time}`], ['Name', req.name], ['Phone', req.phone], ...(req.notes ? [['Notes', req.notes]] : [])]
-      .forEach(([k, v]) => {
-        const row = document.createElement('div');
-        const dt = document.createElement('dt'); dt.textContent = k;
-        const dd = document.createElement('dd'); dd.textContent = v;
-        row.append(dt, dd);
-        document.getElementById('summary').append(row);
-      });
-    // Keep a copy on this device so the customer can find it again.
-    try { localStorage.setItem('vijis-last-request', JSON.stringify({ ...req, savedAt: new Date().toISOString() })); } catch (_) { /* storage may be blocked */ }
-    book.hidden = true;
-    confirm.hidden = false;
-    confirm.focus();
-    confirm.scrollIntoView({ block: 'start' });
+    const btn = document.getElementById('book-submit');
+    const err = document.getElementById('book-error');
+    err.hidden = true;
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    fetch(BOOKING_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...req, service: req.service.replace(' · ', ' - '), turnstileToken: f.get('cf-turnstile-response') || '' }),
+    })
+      .then(r => r.json().then(body => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (!ok) throw new Error(body.error || 'Something went wrong.');
+        const summary = document.getElementById('summary');
+        summary.innerHTML = '';
+        [['Service', req.service], ['Stylist', req.stylist], ['When', `${req.date}, ${req.time}`], ['Name', req.name], ['Phone', req.phone], ...(req.notes ? [['Notes', req.notes]] : [])]
+          .forEach(([k, v]) => {
+            const row = document.createElement('div');
+            const dt = document.createElement('dt'); dt.textContent = k;
+            const dd = document.createElement('dd'); dd.textContent = v;
+            row.append(dt, dd);
+            summary.append(row);
+          });
+        try { localStorage.setItem('vijis-last-request', JSON.stringify({ ...req, savedAt: new Date().toISOString() })); } catch (_) { /* storage may be blocked */ }
+        book.hidden = true;
+        confirm.hidden = false;
+        confirm.focus();
+        confirm.scrollIntoView({ block: 'start' });
+      })
+      .catch(e => {
+        err.textContent = `${e.message} You can also call us at (408) 255-4800.`;
+        err.hidden = false;
+        window.turnstile?.reset();
+      })
+      .finally(() => { btn.disabled = false; btn.textContent = 'Request appointment'; });
   });
 
   book.addEventListener('input', e => e.target.closest('.field')?.classList.remove('invalid'));
-  document.getElementById('edit-booking').addEventListener('click', () => {
-    confirm.hidden = true;
-    book.hidden = false;
-    book.querySelector('select, input')?.focus();
-  });
 }
 
 // ---- Contact form (sends through WhatsApp or SMS; no server needed)
